@@ -1,0 +1,27 @@
+{
+  "analysis_version": "0.0.1",
+  "config": {
+    "definition_version": "immobility_v1",
+    "fps_override": null,
+    "gui": {
+      "init_window_s": 2.0,
+      "n_flies_expected": 5
+    },
+    "roi": {
+      "mode": "full_frame",
+      "roi_json_path": null,
+      "roi_mask_path": null
+    },
+    "trim_end_s": null,
+    "trim_start_s": 0.0
+  },
+  "config_hash": "12ad40c967aec0f48430f2737d576d6c8c986a180e520a325028ff5996ba3fa1",
+  "cwd": "C:\\Users\\Vasuj\\swimmobility",
+  "definition_version": "immobility_v1",
+  "trial_id": "t001",
+  "video_hash_sha256": null,
+  "video_path": "C:\\path\\to\\fake.mp4",
+  "warnings": [
+    "video_path_does_not_exist"
+  ]
+}

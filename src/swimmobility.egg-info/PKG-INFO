@@ -1,5 +1,20 @@
 Metadata-Version: 2.4
 Name: swimmobility
-Version: 0.0.0
+Version: 0.0.1
+Summary: Deterministic forced-swim immobility bout detection from video (no ML).
+Author: Jordan Vasu
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
 License-File: LICENSE
+Requires-Dist: numpy>=1.24
+Requires-Dist: pandas>=2.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4; extra == "dev"
+Provides-Extra: video
+Requires-Dist: opencv-python>=4.8; extra == "video"
+Provides-Extra: signal
+Requires-Dist: scipy>=1.10; extra == "signal"
+Provides-Extra: plot
+Requires-Dist: matplotlib>=3.7; extra == "plot"
 Dynamic: license-file

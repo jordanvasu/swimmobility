@@ -8,6 +8,8 @@ src/swimmobility/config.py
 src/swimmobility.egg-info/PKG-INFO
 src/swimmobility.egg-info/SOURCES.txt
 src/swimmobility.egg-info/dependency_links.txt
+src/swimmobility.egg-info/entry_points.txt
+src/swimmobility.egg-info/requires.txt
 src/swimmobility.egg-info/top_level.txt
 src/swimmobility/io/__init__.py
 src/swimmobility/io/outputs.py
