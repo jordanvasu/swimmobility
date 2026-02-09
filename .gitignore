@@ -1,0 +1,17 @@
+# ---- local outputs / artifacts ----
+out_*/
+out_test/
+trial_artifacts/
+
+# ---- generated media ----
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.json
+
+# ---- python ----
+__pycache__/
+*.py[cod]
+.pytest_cache/
