@@ -40,6 +40,10 @@ class SwimConfig:
     roi: RoiConfig = field(default_factory=RoiConfig)
     gui: GuiConfig = field(default_factory=GuiConfig)
 
+    motion_threshold: float = 2.0
+    smoothing_window_frames: int = 5
+    min_immobility_bout_s: float = 0.5
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

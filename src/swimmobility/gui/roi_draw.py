@@ -36,36 +36,30 @@ def _mask_from_polygon(shape_hw: Tuple[int, int], poly: List[Point]) -> np.ndarr
     return mask
 
 
-def draw_polygon_roi_on_first_frame(video_path: str | Path) -> tuple[np.ndarray, List[Point]]:
-    """
-    Draw polygon ROI on the first frame of a video.
-
-    Mouse:
-      - Left click: add vertex
-
-    Keys:
-      - Enter: finish (requires >= 3 points)
-      - Backspace/Delete: remove last point
-      - r: reset
-      - q or Esc: cancel
-    """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        raise FileNotFoundError(f"Could not open video: {video_path}")
-
-    ok, frame = cap.read()
-    cap.release()
-    if not ok or frame is None:
-        raise RuntimeError("Could not read first frame.")
-
+def _draw_single_polygon(
+    frame: np.ndarray,
+    existing_polygons: List[List[Point]],
+    fly_index: int,
+    n_flies: int,
+) -> List[Point]:
+    """Interactively draw a single polygon on frame. Returns list of points."""
     points: List[Point] = []
     display = frame.copy()
-    win = "Swimmobility ROI (L-click vertices, Enter=finish, r=reset, q=quit)"
+    win = (
+        f"Swimmobility ROI — Fly {fly_index + 1} of {n_flies} "
+        "(L-click vertices, Enter=finish, r=reset, q=quit)"
+    )
 
     def redraw() -> None:
         nonlocal display
         display = frame.copy()
 
+        # Draw previously confirmed polygons in blue
+        for prev_poly in existing_polygons:
+            prev_pts = np.array(prev_poly, dtype=np.int32).reshape((-1, 1, 2))
+            cv2.polylines(display, [prev_pts], isClosed=True, color=(255, 100, 0), thickness=2)
+
+        # Draw current polygon in green
         for p in points:
             cv2.circle(display, p, 4, (0, 255, 0), -1)
 
@@ -78,7 +72,7 @@ def draw_polygon_roi_on_first_frame(video_path: str | Path) -> tuple[np.ndarray,
 
         cv2.putText(
             display,
-            f"Points: {len(points)}",
+            f"Fly {fly_index + 1}/{n_flies} — Points: {len(points)}",
             (10, 30),
             cv2.FONT_HERSHEY_SIMPLEX,
             1.0,
@@ -114,7 +108,62 @@ def draw_polygon_roi_on_first_frame(video_path: str | Path) -> tuple[np.ndarray,
             if len(points) < 3:
                 continue
             cv2.destroyWindow(win)
-            return frame, points
+            return points
+
+
+def draw_polygon_roi_on_first_frame(video_path: str | Path) -> tuple[np.ndarray, List[Point]]:
+    """
+    Draw a single polygon ROI on the first frame of a video.
+
+    Mouse:
+      - Left click: add vertex
+
+    Keys:
+      - Enter: finish (requires >= 3 points)
+      - Backspace/Delete: remove last point
+      - r: reset
+      - q or Esc: cancel
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Could not open video: {video_path}")
+
+    ok, frame = cap.read()
+    cap.release()
+    if not ok or frame is None:
+        raise RuntimeError("Could not read first frame.")
+
+    points = _draw_single_polygon(frame, existing_polygons=[], fly_index=0, n_flies=1)
+    return frame, points
+
+
+def draw_multiple_polygon_rois(
+    video_path: str | Path,
+    n_flies: int,
+) -> tuple[np.ndarray, List[List[Point]]]:
+    """
+    Draw N polygon ROIs sequentially on the first frame of a video.
+
+    For each fly the user draws one polygon; previously confirmed polygons
+    are displayed in blue so the user can avoid overlap.
+
+    Returns (first_frame, list_of_polygons).
+    """
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        raise FileNotFoundError(f"Could not open video: {video_path}")
+
+    ok, frame = cap.read()
+    cap.release()
+    if not ok or frame is None:
+        raise RuntimeError("Could not read first frame.")
+
+    all_polygons: List[List[Point]] = []
+    for i in range(n_flies):
+        poly = _draw_single_polygon(frame, existing_polygons=all_polygons, fly_index=i, n_flies=n_flies)
+        all_polygons.append(poly)
+
+    return frame, all_polygons
 
 
 def save_roi_artifacts(
@@ -123,6 +172,7 @@ def save_roi_artifacts(
     outdir: str | Path,
     basename: str = "roi",
 ) -> RoiArtifact:
+    """Save a single-polygon ROI to roi.json and roi_mask.png (legacy / single-fly)."""
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
@@ -134,9 +184,14 @@ def save_roi_artifacts(
     mask_path = outdir / f"{basename}_mask.png"
 
     payload = {
-        "roi_polygon_xy": polygon,
-        "roi_bbox_xywh": bbox,
-        "frame_shape_hw": [h, w],
+        "polygons": [
+            {
+                "fly_id": 1,
+                "roi_polygon_xy": polygon,
+                "roi_bbox_xywh": list(bbox),
+                "frame_shape_hw": [h, w],
+            }
+        ]
     }
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     cv2.imwrite(str(mask_path), mask)
@@ -147,3 +202,70 @@ def save_roi_artifacts(
         roi_json_path=str(json_path),
         roi_mask_path=str(mask_path),
     )
+
+
+def save_multiple_roi_artifacts(
+    frame: np.ndarray,
+    polygons: List[List[Point]],
+    outdir: str | Path,
+    basename: str = "roi",
+) -> str:
+    """Save multiple polygons to roi.json. Returns path to roi.json."""
+    outdir = Path(outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    h, w = frame.shape[:2]
+    json_path = outdir / f"{basename}.json"
+
+    polygon_entries = []
+    for idx, polygon in enumerate(polygons):
+        fly_id = idx + 1
+        bbox = _polygon_bbox(polygon)
+        polygon_entries.append(
+            {
+                "fly_id": fly_id,
+                "roi_polygon_xy": polygon,
+                "roi_bbox_xywh": list(bbox),
+                "frame_shape_hw": [h, w],
+            }
+        )
+
+        # Write individual mask for each fly
+        mask = _mask_from_polygon((h, w), polygon)
+        mask_path = outdir / f"{basename}_fly{fly_id}_mask.png"
+        cv2.imwrite(str(mask_path), mask)
+
+    payload = {"polygons": polygon_entries}
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return str(json_path)
+
+
+def load_roi_masks(
+    roi_json_path: str | Path,
+    frame_shape_hw: Tuple[int, int] | None = None,
+) -> List[np.ndarray]:
+    """
+    Load ROI masks from a roi.json file.
+
+    Supports the multi-polygon format: {"polygons": [...]}
+    Falls back to legacy single-polygon format: {"roi_polygon_xy": [...], "frame_shape_hw": [...]}
+
+    Returns list of uint8 masks (255 inside ROI, 0 outside), one per fly.
+    """
+    data = json.loads(Path(roi_json_path).read_text(encoding="utf-8"))
+
+    if "polygons" in data:
+        entries = data["polygons"]
+    else:
+        # Legacy single-polygon format
+        entries = [data]
+
+    masks = []
+    for entry in entries:
+        poly = entry["roi_polygon_xy"]
+        shape = tuple(entry["frame_shape_hw"]) if "frame_shape_hw" in entry else frame_shape_hw
+        if shape is None:
+            raise ValueError("frame_shape_hw not found in roi.json and not provided as argument.")
+        masks.append(_mask_from_polygon(shape, poly))
+
+    return masks
